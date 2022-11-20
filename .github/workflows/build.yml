@@ -13,10 +13,24 @@ jobs:
         uses: actions/checkout@v3
       - name: Cache build
         uses: Swatinem/rust-cache@v2
+      - name: Setup toolchain
+        run: |
+          rustup target add aarch64-pc-windows-msvc
       - name: Build x86_64-pc-windows-msvc
         run: |
           cargo build  --target=x86_64-pc-windows-msvc --release -vv
           cd target\x86_64-pc-windows-msvc\release && tar -cavf "$env:CRATE_NAME-x86_64-pc-windows-msvc.zip" "$env:CRATE_NAME.exe"  && cd ../../..
+      - name: Build aarch64-pc-windows-msvc
+        run: |
+          $vs = (vswhere -products * -latest -prerelease -property installationPath)
+          echo "call `"$vs\VC\Auxiliary\Build\vcvarsall.bat`" x64">>host.bat
+          echo "cl `"%*%`"">>host.bat
+          echo "call `"$vs\VC\Auxiliary\Build\vcvarsall.bat`" x64_arm64">>target.bat
+          echo "cl `"%*%`"">>target.bat
+          $env:HOST_CC = (pwd).Path + "\host.bat"
+          $env:TARGET_CC = (pwd).Path + "\target.bat"
+          cargo build --target=aarch64-pc-windows-msvc --release -vv
+          cd target\aarch64-pc-windows-msvc\release && tar -cavf "$env:CRATE_NAME-aarch64-pc-windows-msvc.zip" "$env:CRATE_NAME.exe"  && cd ../../..
       - name: Upload clue-x86_64-pc-windows-msvc
         uses: actions/upload-artifact@v3
         with:
