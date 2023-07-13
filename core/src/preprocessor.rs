@@ -9,7 +9,7 @@ use crate::{
 	code::{Code, CodeChar},
 	env::Options,
 	format_clue,
-	ErrorMessaging, impl_errormessaging,
+	error::{ErrorMessaging, CodeReader}, impl_errormessaging,
 };
 use ahash::AHashMap;
 use std::{
@@ -83,7 +83,8 @@ struct CodeFile<'a> {
 	peeked: Option<CodeChar>,
 	line: usize,
 	column: usize,
-	filename: &'a String,
+	reader: &'a dyn CodeReader,
+	filename: String,
 	last_if: bool,
 	cscope: u8,
 	ends: Vec<u8>,
@@ -96,7 +97,7 @@ impl<'a> CodeFile<'a> {
 	fn new(
 		code: &'a mut [u8],
 		line: usize,
-		filename: &'a String,
+		reader: &'a dyn CodeReader,
 		cscope: u8,
 		options: &'a Options,
 	) -> Self {
@@ -109,7 +110,8 @@ impl<'a> CodeFile<'a> {
 			peeked: None,
 			line,
 			column: 1,
-			filename,
+			reader,
+			filename: reader.get_filename(),
 			last_if: true,
 			cscope,
 			ends: Vec::new(),
@@ -227,7 +229,7 @@ impl<'a> CodeFile<'a> {
 		match self.read_char() {
 			None => {
 				self.expected_before(
-					&String::from_utf8_lossy(&[wanted_c]),
+					String::from_utf8_lossy(&[wanted_c]),
 					"<end>",
 					self.line,
 					self.column,
@@ -238,8 +240,8 @@ impl<'a> CodeFile<'a> {
 			}
 			Some((c, line, column)) if c != wanted_c => {
 				self.expected(
-					&String::from_utf8_lossy(&[wanted_c]),
-					&String::from_utf8_lossy(&[c]),
+					String::from_utf8_lossy(&[wanted_c]),
+					String::from_utf8_lossy(&[c]),
 					line,
 					column,
 					self.read - 1..self.read,
@@ -393,7 +395,7 @@ impl<'a> CodeFile<'a> {
 		let len = self.code.len();
 		let block = &mut self.code[self.read..len];
 		let (block, ppvars, line, read) =
-			preprocess_code(block, line, true, self.filename, &Options::default())?;
+			preprocess_code(block, line, true, self.reader, &Options::default())?;
 		self.line = line;
 		self.read += read;
 		Ok((block, ppvars))
@@ -490,7 +492,7 @@ impl<'a> CodeFile<'a> {
 			_ => {
 				self.expected(
 					"==' or '!=",
-					&String::from_utf8_lossy(&comparison),
+					String::from_utf8_lossy(&comparison),
 					self.line,
 					self.column,
 					comp_pos..comp_pos + 2,
@@ -573,7 +575,7 @@ impl<'a> CodeFile<'a> {
 					self.line,
 					self.column,
 					start..self.read,
-					Some("Version must be 'X.Y.Z'")
+					Some("Version must be 'X.Y.Z'".to_owned())
 				);
 				return u8::MAX;
 			}
@@ -588,7 +590,7 @@ impl<'a> CodeFile<'a> {
 					self.line,
 					self.column,
 					start..self.read,
-					Some("Version must be 'X.Y.Z'")
+					Some("Version must be 'X.Y.Z'".to_owned())
 				);
 				u8::MAX
 			},
@@ -616,12 +618,11 @@ impl<'a> CodeFile<'a> {
 ///     Ok(())
 /// }
 /// ```
-pub fn read_file(
-	path: impl Into<PathBuf>,
-	filename: &String,
+pub fn read_code(
+	reader: &dyn CodeReader,
 	options: &Options,
 ) -> Result<(PPCode, PPVars), String> {
-	let result = preprocess_code(&mut check!(fs::read(path.into())), 1, false, filename, options)?;
+	let result = preprocess_code(&mut unsafe { check!(reader.get_code()).as_bytes_mut() }, 1, false, reader, options)?;
 	Ok((result.0, result.1))
 }
 
@@ -647,14 +648,14 @@ pub fn preprocess_code(
 	code: &mut [u8],
 	line: usize,
 	is_block: bool,
-	filename: &String,
+	reader: &dyn CodeReader,
 	options: &Options,
 ) -> Result<(PPCode, PPVars, usize, usize), String> {
 	let mut output_dir: Option<PathBuf> = None;
 	let mut finalcode = VecDeque::new();
 	let mut currentcode = Code::with_capacity(code.len());
 	let mut size = 0;
-	let mut code = CodeFile::new(code, line, filename, is_block as u8, options);
+	let mut code = CodeFile::new(code, line, reader, is_block as u8, options);
 	let mut variables = PPVars::new();
 	let mut pseudos: Option<VecDeque<Code>> = None;
 	let mut bitwise = false;
@@ -713,7 +714,7 @@ pub fn preprocess_code(
 											c.1,
 											c.2,
 											code.read - 1..code.read,
-											Some(&err.to_string())
+											Some(err.to_string())
 										);
 										break
 									}
@@ -771,7 +772,7 @@ pub fn preprocess_code(
 										unsafe { trimmed_name.as_bytes_mut() },
 										code.line,
 										false,
-										filename,
+										reader,
 										options
 									)?;
 									for (key, value) in new_variables {
@@ -781,7 +782,7 @@ pub fn preprocess_code(
 										0,
 										codes,
 										&variables,
-										filename
+										reader,
 									)?.to_string();
 								}
 								let start = if trimmed_name.contains(|c| matches!(c, '.' | '[')) {
@@ -1253,6 +1254,7 @@ fn read_pseudos(
 }
 
 pub struct CodesInfo<'a> {
+	reader: &'a dyn CodeReader,
 	filename: &'a String,
 	errors: u8,
 }
@@ -1281,7 +1283,7 @@ impl CodesInfo<'_> {
 		help: Option<&str>
 	) {
 		let range = self.get_index(line, column, len);
-		ErrorMessaging::error(self, message, line, column, range, help);
+		ErrorMessaging::error(self, message, line, column, range, help.map(|s| s.to_owned()));
 	}
 
 	fn expected_before(
@@ -1294,7 +1296,7 @@ impl CodesInfo<'_> {
 		help: Option<&str>
 	) {
 		let range = self.get_index(line, column, len);
-		ErrorMessaging::expected_before(self, expected, before, line, column, range, help);
+		ErrorMessaging::expected_before(self, expected, before, line, column, range, help.map(|s| s.to_owned()));
 	}
 
 }
@@ -1330,11 +1332,12 @@ pub fn preprocess_codes(
 	stacklevel: u8,
 	codes: PPCode,
 	variables: &PPVars,
-	filename: &String,
+	reader: &dyn CodeReader,
 ) -> Result<Code, String> {
 	let (mut codes, size) = codes;
 	let mut i = CodesInfo {
-		filename,
+		reader,
+		filename: &reader.get_filename(),
 		errors: 0,
 	};
 	if codes.len() == 1 {
@@ -1343,7 +1346,7 @@ pub fn preprocess_codes(
 		let mut code = Code::with_capacity(size);
 		for (codepart, uses_vars) in codes {
 			code.append(if uses_vars {
-				preprocess_variables(stacklevel, &codepart, codepart.len(), variables, &mut i, filename)?
+				preprocess_variables(stacklevel, &codepart, codepart.len(), variables, &mut i, reader)?
 			} else {
 				codepart
 			});
@@ -1395,10 +1398,12 @@ pub fn preprocess_variables(
 	size: usize,
 	variables: &PPVars,
 	i: &mut CodesInfo,
-	filename: &String,
+	reader: &dyn CodeReader,
 ) -> Result<Code, String> {
 	let mut result = Code::with_capacity(size);
 	let mut chars = code.iter().peekable();
+	let filename = &reader.get_filename();
+
 	while let Some(c) = chars.next() {
 		match c.0 {
 			b'$' => {
@@ -1437,7 +1442,7 @@ pub fn preprocess_variables(
 							value.len(),
 							variables,
 							i,
-							filename,
+							reader,
 						)?,
 						PPVar::Macro {
 							code,
@@ -1521,7 +1526,7 @@ pub fn preprocess_variables(
 										value.len(),
 										variables,
 										i,
-										filename,
+										reader,
 									)?);
 									if let Some(arg_name) = args.next() {
 										macro_variables.insert(arg_name.clone(), ppvalue);
@@ -1566,7 +1571,7 @@ pub fn preprocess_variables(
 								stacklevel + 1,
 								code.clone(),
 								&macro_variables,
-								filename,
+								reader,
 							)?
 						}
 						PPVar::VarArgs((codes, size)) => {
@@ -1579,7 +1584,7 @@ pub fn preprocess_variables(
 									stacklevel + 1,
 									(codes.clone(), *size),
 									&variables,
-									filename,
+									reader,
 								)?);
 								name.push(*name.last().unwrap());
 							}

@@ -1,7 +1,7 @@
 use ahash::AHashMap;
 use clue_core::code::Code;
 use clue_core::env::Options;
-use clue_core::preprocessor::{read_file, PPCode, PPVar, PPVars};
+use clue_core::preprocessor::{read_code, PPCode, PPVar, PPVars};
 use clue_core::{check, format_clue};
 use crossbeam_queue::SegQueue;
 use flume::Sender;
@@ -165,7 +165,7 @@ fn preprocess_file_dir(
 			),
 		};
 
-		let (file_codes, file_variables) = match read_file(filepath, &filename, options) {
+		let (file_codes, file_variables) = match read_code(filepath, &filename, options) {
 			Ok(t) => t,
 			Err(e) => {
 				tx.send(PreprocessorAnalyzerData {

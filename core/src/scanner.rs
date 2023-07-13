@@ -14,7 +14,7 @@ use crate::{
 	finish,
 	code::{Code, CodeChars},
 	format_clue,
-	ErrorMessaging, impl_errormessaging,
+	error::{ErrorMessaging, CodeReader},impl_errormessaging
 };
 
 #[cfg(feature = "serde")]
@@ -160,7 +160,8 @@ struct ScannerInfo<'a> {
 	size: usize,
 	code: CodeChars,
 	read: Vec<(char, usize, usize)>,
-	filename: &'a String,
+	reader: &'a dyn CodeReader,
+	filename: String,
 	tokens: Vec<Token>,
 	last: TokenType,
 	errors: u8,
@@ -169,7 +170,7 @@ struct ScannerInfo<'a> {
 impl_errormessaging!(ScannerInfo<'_>);
 
 impl<'a> ScannerInfo<'a> {
-	fn new(code: Code, filename: &'a String) -> Self {
+	fn new(code: Code, reader: &'a dyn CodeReader) -> Self {
 		let size = code.len() + 2;
 		let mut code = code.chars();
 		let mut read = Vec::with_capacity(size);
@@ -181,7 +182,8 @@ impl<'a> ScannerInfo<'a> {
 			size,
 			code,
 			read,
-			filename,
+			reader,
+			filename: reader.get_filename(),
 			tokens: Vec::new(),
 			last: EOF,
 			errors: 0,
@@ -195,7 +197,7 @@ impl<'a> ScannerInfo<'a> {
 			self.current.line,
 			self.current.column,
 			self.start.index..self.current.index,
-			help
+			help.map(|s| s.to_owned())
 		)
 	}
 
@@ -668,8 +670,8 @@ static KEYWORDS: phf::Map<&'static [u8], KeywordType> = phf_map! {
 ///     Ok(())
 /// }
 /// ```
-pub fn scan_code(code: Code, filename: &String) -> Result<Vec<Token>, String> {
-	let mut i: ScannerInfo = ScannerInfo::new(code, filename);
+pub fn scan_code(code: Code, reader: &dyn CodeReader) -> Result<Vec<Token>, String> {
+	let mut i: ScannerInfo = ScannerInfo::new(code, reader);
 	while !i.ended() && i.peek(0) != '\0' {
 		i.start = i.current;
 		i.update_column();

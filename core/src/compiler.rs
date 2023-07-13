@@ -6,6 +6,7 @@
 use std::fmt::Write;
 use std::iter::{Iterator, Peekable};
 
+use crate::error::CodeReader;
 use crate::{
 	env::{ContinueMode, Options},
 	format_clue,
@@ -34,7 +35,8 @@ use crate::{
 /// ```
 pub struct Compiler<'a> {
 	options: &'a Options,
-	filename: &'a String,
+	reader: &'a dyn CodeReader,
+	filename: String,
 }
 
 impl<'a> Compiler<'a> {
@@ -46,8 +48,8 @@ impl<'a> Compiler<'a> {
 	/// let options = Options::default();
 	/// let compiler = Compiler::new(&options, &String::from("file.clue"));
 	/// ```
-	pub const fn new(options: &'a Options, filename: &'a String) -> Self {
-		Self { options, filename }
+	pub fn new(options: &'a Options, reader: &'a dyn CodeReader) -> Self {
+		Self { options,reader, filename: reader.get_filename() }
 	}
 
 	fn indentate(&self, scope: usize) -> String {

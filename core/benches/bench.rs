@@ -110,7 +110,7 @@ fn preprocess_file_dir(
 			),
 		};
 
-		let (file_codes, file_variables) = match read_file(filepath, &filename, options) {
+		let (file_codes, file_variables) = match read_code(filepath, &filename, options) {
 			Ok(t) => t,
 			Err(e) => {
 				tx.send(PreprocessorAnalyzerData {

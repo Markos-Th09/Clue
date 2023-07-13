@@ -171,11 +171,11 @@ pub fn compile_code(
 	if options.env_expand {
 		println!("Preprocessed file \"{name}\":\n{}", code.to_string());
 	}
-	let tokens: Vec<Token> = scan_code(code.clone(), name)?;
+	let tokens: Vec<Token> = scan_code(code, name)?;
 	if options.env_tokens {
 		println!("Scanned tokens of file \"{name}\":\n{tokens:#?}");
 	}
-	unimplemented!();
+	// unimplemented!();
 	let (ctokens, statics) = parse_tokens(
 		tokens,
 		//code,
@@ -284,7 +284,7 @@ fn main() {
 		println!("Warning: \"LuaJIT continue mode was deprecated and replaced by goto mode\"")
 	}
 	if let Err(e) = start_compilation(cli) {
-		println!("{}: {}", "Error".red().bold(), e.to_string())
+		println!("{}: {}", "Error".red().bold(), e)
 	}
 }
 
@@ -341,7 +341,7 @@ fn start_compilation(cli: Cli) -> Result<(), String> {
 		check!(file.write_all(path.to_string_lossy().as_bytes()));
 		let filepath = file.path();
 		let filename = filepath.to_string_lossy().into_owned();
-		let (rawcode, variables) = read_file(filepath, &filename, &options)?;
+		let (rawcode, variables) = read_code(filepath, &filename, &options)?;
 		let (output, statics) = compile_code(rawcode, &variables, &filename, 0, &options)?;
 		let code = statics + &output;
 		#[cfg(feature = "mlua")]
@@ -398,7 +398,7 @@ fn start_compilation(cli: Cli) -> Result<(), String> {
 		path.is_file()
 	} {
 		let filename = path.file_name().unwrap().to_string_lossy().into_owned();
-		let (rawcode, variables) = read_file(path, &filename, &options)?;
+		let (rawcode, variables) = read_code(path, &filename, &options)?;
 		let (output, statics) = compile_code(rawcode, &variables, &filename, 0, &options)?;
 		let code = statics + &output;
 		save_result(cli.dontsave, cli.outputname, code)?

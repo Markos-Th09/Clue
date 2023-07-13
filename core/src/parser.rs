@@ -11,7 +11,7 @@ use crate::{
 	compiler::Compiler,
 	env::{BitwiseMode, ContinueMode, LuaVersion, Options},
 	scanner::{BorrowedToken, Token, TokenType, TokenType::*},
-	ErrorMessaging,
+	error::{ErrorMessaging, CodeReader, FileReader},
 	format_clue,
 	check, impl_errormessaging,
 };
@@ -224,10 +224,10 @@ pub enum ComplexToken {
 	TRY_CATCH {
 		/// The code block of the try block.
 		totry: CodeBlock,
-		
+
 		/// An optional code block of the catch block.
 		catch: Option<CodeBlock>,
-		
+
 		/// The name of the error variable in the catch block.
 		error: Option<String>,
 	},
@@ -289,9 +289,10 @@ struct ParserInfo<'a> {
 	options: &'a Options,
 	current: usize,
 	size: usize,
-	filename: &'a String,
+	filename: String,
 	expr: Expression,
 	tokens: Vec<Token>,
+	reader: &'a dyn CodeReader,
 	//code: Code,
 	internal_var_id: u8,
 	internal_stack: Vec<Cell<Expression>>,
@@ -306,21 +307,21 @@ impl_errormessaging!(ParserInfo<'_>);
 impl<'a> ParserInfo<'a> {
 	fn new(
 		tokens: Vec<Token>, /* , locals: LocalsList */
-		//code: Code,
-		filename: &'a String,
+		reader: &'a dyn CodeReader,
 		options: &'a Options,
 	) -> ParserInfo<'a> {
 		ParserInfo {
 			current: 0,
 			size: tokens.len() - 1,
-			filename,
+			filename: reader.get_filename(),
 			expr: Expression::with_capacity(tokens.len()),
 			tokens,
+			reader,
 			//code,
 			internal_var_id: 0,
 			internal_stack: Vec::new(),
 			statics: String::new(),
-			compiler: Compiler::new(options, filename),
+			compiler: Compiler::new(options, reader),
 			options,
 			errors: 0,
 			// locals,
@@ -1271,7 +1272,7 @@ impl<'a> ParserInfo<'a> {
 			Ok(Expression::new())
 		} else {
 			tokens.push(self.tokens.last().unwrap().clone());
-			let (ctokens, statics) = parse_tokens(tokens, self.filename, self.options)?;
+			let (ctokens, statics) = parse_tokens(tokens, self.reader, self.options)?;
 			self.statics += &statics;
 			Ok(ctokens)
 		}
@@ -2231,14 +2232,14 @@ impl<'a> ParserInfo<'a> {
 ///     Ok(())
 /// }
 /// ```
-pub fn parse_tokens(
+pub fn parse_tokens<'a>(
 	tokens: Vec<Token>,
 	//code: Code,
 	//locals: Option<AHashMap<String, LuaType>>,
-	filename: &String,
+	reader: &'a dyn CodeReader,
 	options: &Options,
 ) -> Result<(Expression, String), String> {
-	let mut i = ParserInfo::new(tokens/*, code*/ /* , locals */, filename, options);
+	let mut i = ParserInfo::new(tokens/*, code*/ /* , locals */, reader, options);
 	while !i.ended() {
 		let t = i.advance();
 		match t.kind() {
