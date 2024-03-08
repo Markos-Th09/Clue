@@ -1,5 +1,5 @@
 [workspace]
-members = ["cli", "core", "wasm"]
+members = ["bindings", "cli", "core", "wasm"]
 default-members = ["cli", "core"]
 resolver = "2"
 
