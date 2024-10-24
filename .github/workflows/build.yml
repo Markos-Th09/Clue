@@ -27,7 +27,7 @@ jobs:
           path: target\${{ matrix.target }}\release\${{ env.CRATE_NAME }}-${{ matrix.target }}.zip
 
       - name: Publish in release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
           files: |
@@ -60,7 +60,7 @@ jobs:
           name: ${{ env.CRATE_NAME }}-${{ matrix.target }}.tar.gz
           path: target/${{ matrix.target }}/release/${{ env.CRATE_NAME }}-${{ matrix.target }}.tar.gz
       - name: Publish in release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
           files: |
@@ -144,7 +144,7 @@ jobs:
           name: ${{ env.RPM_FILENAME }}
           path: target/${{ matrix.target }}/rpm/*.rpm
       - name: Publish in release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
           files: |
@@ -175,7 +175,7 @@ jobs:
           name: clue_wasm.zip
           path: wasm/clue_wasm.zip
       - name: Publish in release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
           files: |
