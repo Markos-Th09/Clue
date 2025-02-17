@@ -11,9 +11,9 @@ jobs:
       matrix:
         include:
           - target: x86_64-pc-windows-msvc
-            msvc: x64
+            features: "default"
           - target: aarch64-pc-windows-msvc
-            msvc: x64_arm64
+            features: "interpreter,lsp"
     env:
       CRATE_NAME: "clue"
     steps:
@@ -25,21 +25,6 @@ jobs:
         run: rustup target add ${{ matrix.target }}
       - name: Build ${{ matrix.target }}
         run: |
-          $vcpath = (& "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -property installationPath)
-          function Invoke-CmdScript {
-            param(
-              [String] $script
-            )
-
-            & cmd.exe /c """$script"" $args & set" |
-            select-string '^([^=]*)=(.*)$' | foreach-object {
-              $varName = $_.Matches[0].Groups[1].Value
-              $varValue = $_.Matches[0].Groups[2].Value
-              set-item Env:$varName $varValue
-            }
-          }
-
-          Invoke-CmdScript "$vcpath\VC\Auxiliary\Build\vcvarsall.bat" ${{ matrix.msvc }}
           cargo build  --target=${{ matrix.target }} --release -vv
           cd target\${{ matrix.target }}\release && tar -cavf "$env:CRATE_NAME-${{ matrix.target }}.zip" "$env:CRATE_NAME.exe"  && cd ../../..
       - name: Upload clue-${{ matrix.target }}
